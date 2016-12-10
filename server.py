@@ -12,24 +12,23 @@ HOST_NAME = '127.0.0.1'
 PORT_NUMBER = 8000
 URL = 'https://habrahabr.ru'
 TAGS_IGNORE = ('script', 'style', 'pre', 'code', 'iframe')
-WORDS_SIX_CHARS = re.compile(r'(\b\w{6}\b)', flags=(re.MULTILINE | re.UNICODE))
+WORDS_SIX_CHARS = re.compile(r'(\b\w{6}\b)', flags=(re.UNICODE))
 HABR_LINKS_RE = re.compile(r'^https?://habrahabr\.ru')
 
 
 class MyHandler(BaseHTTPServer.BaseHTTPRequestHandler):
     def do_GET(self):
         """Respond to a GET request."""
-        self.send_response(200)
-        self.send_header("Content-type", "text/html")
+
+        r = requests.get(URL + self.path)
+        self.send_response(r.status_code)
+        self.send_header("Content-type", r.headers.get('content-type'))
         self.end_headers()
 
-        content = self.parse_page(self.path)
-        self.wfile.write(content)
+        if r.headers.get('content-type') == 'text/html; charset=UTF-8':
 
-    def parse_page(self, path):
-        if path != '/favicon.ico':
-            r = requests.get(URL + path)
             soup = BeautifulSoup(r.text, 'html.parser')
+
             for tag in soup.find_all('a', href=HABR_LINKS_RE):
                 tag.attrs['href'] = HABR_LINKS_RE.sub(u'', tag.attrs['href'])
 
@@ -37,7 +36,10 @@ class MyHandler(BaseHTTPServer.BaseHTTPRequestHandler):
                 if node.string.strip() and not isinstance(node, element.PreformattedString) \
                         and node.parent.name not in TAGS_IGNORE:
                     node.string.replace_with(WORDS_SIX_CHARS.sub(u'\\1™', node.string))
-        return soup
+
+            self.wfile.write(soup.encode(formatter=None))
+        else:
+            self.wfile.write(r.content)
 
 
 if __name__ == '__main__':
